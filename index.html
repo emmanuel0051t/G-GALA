@@ -6,7 +6,6 @@
     <title>Barbería Pro - Sistema de Gestión Profesional</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://js.stripe.com/v3/"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -118,10 +117,48 @@
         // ========================================
         // CONFIGURACIÓN DE SUPABASE
         // ========================================
-        const SUPABASE_URL = 'https://icmwollqqgpefwovhwdm.supabase.co'; // CAMBIAR POR TU URL
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImljbXdvbGxxcWdwZWZ3b3Zod2RtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE5NTA0MDksImV4cCI6MjA3NzUyNjQwOX0.5r9SoLu-Ir3uLCOKBfLnyysgM35N1WSYQonLmkkX5yY'; // CAMBIAR POR TU KEY
+        const SUPABASE_URL = 'https://icmwollqqgpefwovhwdm.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImljbXdvbGxxcWdwZWZ3b3Zod2RtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE5NTA0MDksImV4cCI6MjA3NzUyNjQwOX0.5r9SoLu-Ir3uLCOKBfLnyysgM35N1WSYQonLmkkX5yY';
         
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // ========================================
+        // ALMACENAMIENTO LOCAL SIMPLE (FALLBACK)
+        // ========================================
+        class SimpleStorage {
+            static set(key, value) {
+                try {
+                    localStorage.setItem(key, value);
+                    return true;
+                } catch (e) {
+                    console.warn('LocalStorage no disponible, usando memoria');
+                    if (!window._memoryStorage) window._memoryStorage = {};
+                    window._memoryStorage[key] = value;
+                    return true;
+                }
+            }
+
+            static get(key) {
+                try {
+                    return localStorage.getItem(key);
+                } catch (e) {
+                    if (window._memoryStorage) {
+                        return window._memoryStorage[key] || null;
+                    }
+                    return null;
+                }
+            }
+
+            static remove(key) {
+                try {
+                    localStorage.removeItem(key);
+                } catch (e) {
+                    if (window._memoryStorage) {
+                        delete window._memoryStorage[key];
+                    }
+                }
+            }
+        }
 
         // ========================================
         // UTILIDADES Y NOTIFICACIONES
@@ -177,25 +214,23 @@
         // GESTOR DE DATOS CON SUPABASE
         // ========================================
         class DataManager {
-            static async init() {
-                // Crear tablas si no existen (ejecutar una sola vez en Supabase SQL Editor)
-                console.log('Inicializando base de datos...');
-            }
-
             // AUTENTICACIÓN
             static async login(email, password) {
                 try {
-                    const { data: user, error } = await supabase
+                    const { data, error } = await supabase
                         .from('usuarios')
                         .select('*')
                         .eq('email', email)
-                        .eq('password', password) // En producción usar bcrypt
+                        .eq('password', password)
                         .single();
                     
-                    if (error || !user) return null;
+                    if (error || !data) {
+                        console.error('Error en login:', error);
+                        return null;
+                    }
                     
-                    await window.storage.set('currentUser', JSON.stringify(user));
-                    return user;
+                    SimpleStorage.set('currentUser', JSON.stringify(data));
+                    return data;
                 } catch (error) {
                     console.error('Error login:', error);
                     return null;
@@ -208,7 +243,7 @@
                         .from('usuarios')
                         .select('id')
                         .eq('email', email)
-                        .single();
+                        .maybeSingle();
                     
                     if (existing) {
                         return { success: false, message: 'El email ya está registrado' };
@@ -220,7 +255,10 @@
                         .select()
                         .single();
                     
-                    if (error) throw error;
+                    if (error) {
+                        console.error('Error registro:', error);
+                        return { success: false, message: 'Error al registrar usuario' };
+                    }
                     
                     return { success: true, message: 'Usuario registrado exitosamente' };
                 } catch (error) {
@@ -229,17 +267,17 @@
                 }
             }
 
-            static async getCurrentUser() {
+            static getCurrentUser() {
                 try {
-                    const stored = await window.storage.get('currentUser');
-                    return stored ? JSON.parse(stored.value) : null;
+                    const stored = SimpleStorage.get('currentUser');
+                    return stored ? JSON.parse(stored) : null;
                 } catch {
                     return null;
                 }
             }
 
-            static async logout() {
-                await window.storage.delete('currentUser');
+            static logout() {
+                SimpleStorage.remove('currentUser');
             }
 
             // SERVICIOS
@@ -249,6 +287,11 @@
                         .from('servicios')
                         .select('*')
                         .order('nombre');
+                    
+                    if (error) {
+                        console.error('Error obteniendo servicios:', error);
+                        return [];
+                    }
                     return data || [];
                 } catch (error) {
                     console.error('Error obteniendo servicios:', error);
@@ -299,6 +342,11 @@
                             *,
                             usuario:usuarios(*)
                         `);
+                    
+                    if (error) {
+                        console.error('Error obteniendo barberos:', error);
+                        return [];
+                    }
                     return data || [];
                 } catch (error) {
                     console.error('Error obteniendo barberos:', error);
@@ -318,6 +366,11 @@
                             barbero:barberos(*, usuario:usuarios(*))
                         `)
                         .order('fecha_hora', { ascending: false });
+                    
+                    if (error) {
+                        console.error('Error obteniendo citas:', error);
+                        return [];
+                    }
                     return data || [];
                 } catch (error) {
                     console.error('Error obteniendo citas:', error);
@@ -353,6 +406,11 @@
                         .from('inventario')
                         .select('*')
                         .order('nombre');
+                    
+                    if (error) {
+                        console.error('Error obteniendo inventario:', error);
+                        return [];
+                    }
                     return data || [];
                 } catch (error) {
                     console.error('Error obteniendo inventario:', error);
@@ -380,6 +438,32 @@
                     return false;
                 }
             }
+
+            static async deleteInventario(id) {
+                try {
+                    const { error } = await supabase
+                        .from('inventario')
+                        .delete()
+                        .eq('id', id);
+                    return !error;
+                } catch (error) {
+                    console.error('Error eliminando inventario:', error);
+                    return false;
+                }
+            }
+
+            static async deleteCita(id) {
+                try {
+                    const { error } = await supabase
+                        .from('citas')
+                        .delete()
+                        .eq('id', id);
+                    return !error;
+                } catch (error) {
+                    console.error('Error eliminando cita:', error);
+                    return false;
+                }
+            }
         }
 
         // ========================================
@@ -394,7 +478,7 @@
 
             async init() {
                 Loader.show();
-                this.currentUser = await DataManager.getCurrentUser();
+                this.currentUser = DataManager.getCurrentUser();
                 if (this.currentUser) {
                     this.currentView = 'home';
                 }
@@ -446,11 +530,11 @@
                                 <div class="space-y-4">
                                     <div>
                                         <label class="block text-sm font-medium mb-2 text-gray-300">Email</label>
-                                        <input type="email" id="login-email" class="w-full px-4 py-3 rounded-lg bg-dark-lighter border border-primary/30 focus:border-primary focus:ring-2 focus:ring-primary/50 transition-all text-white placeholder-gray-500" placeholder="tu@email.com">
+                                        <input type="email" id="login-email" class="w-full px-4 py-3 rounded-lg bg-dark-lighter border border-primary/30 focus:border-primary focus:ring-2 focus:ring-primary/50 transition-all text-white placeholder-gray-500" placeholder="tu@email.com" value="admin@barberia.com">
                                     </div>
                                     <div>
                                         <label class="block text-sm font-medium mb-2 text-gray-300">Contraseña</label>
-                                        <input type="password" id="login-password" class="w-full px-4 py-3 rounded-lg bg-dark-lighter border border-primary/30 focus:border-primary focus:ring-2 focus:ring-primary/50 transition-all text-white placeholder-gray-500" placeholder="••••••••">
+                                        <input type="password" id="login-password" class="w-full px-4 py-3 rounded-lg bg-dark-lighter border border-primary/30 focus:border-primary focus:ring-2 focus:ring-primary/50 transition-all text-white placeholder-gray-500" placeholder="••••••••" value="admin123">
                                     </div>
                                     <button id="btn-login" class="w-full gradient-gold text-dark font-bold py-3 px-6 rounded-lg transition-all shadow-lg hover:shadow-xl glow-strong">
                                         INICIAR SESIÓN
@@ -458,7 +542,7 @@
                                 </div>
 
                                 <div class="mt-6 p-4 bg-primary/10 border border-primary/20 rounded-lg">
-                                    <p class="text-sm font-semibold mb-2 text-primary">Demo (usar estos datos):</p>
+                                    <p class="text-sm font-semibold mb-2 text-primary">Usuarios de prueba:</p>
                                     <p class="text-xs text-gray-400">
                                         <strong>Admin:</strong> admin@barberia.com / admin123<br>
                                         <strong>Cliente:</strong> cliente@test.com / cliente123
@@ -553,7 +637,7 @@
                                     </div>
                                 </div>
                                 <div class="flex items-center space-x-4">
-                                    <div class="text-right">
+                                    <div class="text-right hidden sm:block">
                                         <p class="text-sm font-medium text-primary">${this.currentUser.nombre}</p>
                                         <p class="text-xs text-gray-400">${this.currentUser.rol}</p>
                                     </div>
@@ -802,8 +886,8 @@
                 });
 
                 document.getElementById('btn-login')?.addEventListener('click', async () => {
-                    const email = document.getElementById('login-email').value;
-                    const password = document.getElementById('login-password').value;
+                    const email = document.getElementById('login-email').value.trim();
+                    const password = document.getElementById('login-password').value.trim();
 
                     if (!email || !password) {
                         Notifier.show('Por favor complete todos los campos', 'error');
@@ -817,7 +901,7 @@
                     if (user) {
                         this.currentUser = user;
                         this.currentView = 'home';
-                        Notifier.show('¡Bienvenido!', 'success');
+                        Notifier.show('¡Bienvenido ' + user.nombre + '!', 'success');
                         await this.render();
                     } else {
                         Notifier.show('Email o contraseña incorrectos', 'error');
@@ -825,9 +909,9 @@
                 });
 
                 document.getElementById('btn-register')?.addEventListener('click', async () => {
-                    const nombre = document.getElementById('register-nombre').value;
-                    const email = document.getElementById('register-email').value;
-                    const password = document.getElementById('register-password').value;
+                    const nombre = document.getElementById('register-nombre').value.trim();
+                    const email = document.getElementById('register-email').value.trim();
+                    const password = document.getElementById('register-password').value.trim();
 
                     if (!nombre || !email || !password) {
                         Notifier.show('Por favor complete todos los campos', 'error');
@@ -841,6 +925,9 @@
                     if (result.success) {
                         Notifier.show(result.message, 'success');
                         tabLogin.click();
+                        document.getElementById('register-nombre').value = '';
+                        document.getElementById('register-email').value = '';
+                        document.getElementById('register-password').value = '';
                     } else {
                         Notifier.show(result.message, 'error');
                     }
@@ -856,14 +943,13 @@
                 });
 
                 document.getElementById('btn-logout')?.addEventListener('click', async () => {
-                    await DataManager.logout();
+                    DataManager.logout();
                     this.currentUser = null;
                     this.currentView = 'login';
                     Notifier.show('Sesión cerrada', 'info');
                     await this.render();
                 });
 
-                // Eventos específicos por vista
                 if (this.currentView === 'servicios') {
                     this.attachServiciosEvents();
                 } else if (this.currentView === 'inventario') {
@@ -926,9 +1012,9 @@
                         const id = e.currentTarget.dataset.id;
                         this.showConfirmModal('¿Eliminar este producto?', async () => {
                             Loader.show();
-                            const { error } = await supabase.from('inventario').delete().eq('id', id);
+                            const success = await DataManager.deleteInventario(id);
                             Loader.hide();
-                            if (!error) {
+                            if (!success) {
                                 Notifier.show('Producto eliminado', 'success');
                                 await this.render();
                             } else {
@@ -1035,9 +1121,9 @@
                         const id = e.currentTarget.dataset.id;
                         this.showConfirmModal('¿Cancelar esta cita?', async () => {
                             Loader.show();
-                            const { error } = await supabase.from('citas').delete().eq('id', id);
+                            const success = await DataManager.deleteCita(id);
                             Loader.hide();
-                            if (!error) {
+                            if (success) {
                                 Notifier.show('Cita cancelada', 'success');
                                 await this.render();
                             } else {
@@ -1055,9 +1141,6 @@
                 });
             }
 
-            // ========================================
-            // UTILIDADES
-            // ========================================
             async calcularSlotsDisponibles(fecha, duracion) {
                 const slots = [];
                 const horaInicio = 9;
@@ -1096,9 +1179,9 @@
             }
 
             procesarPago(precio) {
-                Notifier.show('Procesando pago...', 'info');
+                Notifier.show(`Procesando pago de ${precio}...`, 'info');
                 setTimeout(() => {
-                    Notifier.show('¡Pago exitoso! Gracias.', 'success');
+                    Notifier.show('¡Pago exitoso! Gracias por tu preferencia.', 'success');
                 }, 2000);
             }
 
