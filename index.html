@@ -3,247 +3,485 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Barbería Pro - Sistema de Gestión de Citas</title>
+    <title>Barbería Pro - Sistema de Gestión Profesional</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://js.stripe.com/v3/"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: {
                 extend: {
                     colors: {
-                        primary: '#5D5CDE',
+                        primary: '#D4AF37',
+                        secondary: '#FFD700',
+                        dark: '#0A0A0A',
+                        'dark-lighter': '#1A1A1A',
+                        'dark-card': '#141414'
                     }
                 }
             }
         }
     </script>
     <style>
-        .fade-in { animation: fadeIn 0.3s ease-in; }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+        
+        * {
+            font-family: 'Rajdhani', sans-serif;
         }
-        .modal-overlay {
-            background-color: rgba(0, 0, 0, 0.5);
-            backdrop-filter: blur(4px);
+        
+        h1, h2, h3, .font-display {
+            font-family: 'Orbitron', sans-serif;
+        }
+        
+        .gradient-gold {
+            background: linear-gradient(135deg, #D4AF37 0%, #FFD700 50%, #D4AF37 100%);
+            background-size: 200% 200%;
+            animation: gradientShift 3s ease infinite;
+        }
+        
+        @keyframes gradientShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+        
+        .glow {
+            box-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
+        }
+        
+        .glow-strong {
+            box-shadow: 0 0 30px rgba(212, 175, 55, 0.6), 0 0 60px rgba(212, 175, 55, 0.3);
+        }
+        
+        .slide-in {
+            animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            animation: slideInRight 0.3s ease-out;
+        }
+        
+        @keyframes slideInRight {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 40px rgba(212, 175, 55, 0.2);
+        }
+        
+        .loader {
+            border: 3px solid rgba(212, 175, 55, 0.1);
+            border-top-color: #D4AF37;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
-<body class="bg-white dark:bg-[#181818] text-gray-900 dark:text-gray-100 transition-colors min-h-screen">
+<body class="bg-dark text-gray-100 min-h-screen">
     <div id="app"></div>
+    <div id="notifications"></div>
 
     <script>
         // ========================================
-        // 1. CONFIGURACIÓN DE DARK MODE
+        // CONFIGURACIÓN DE SUPABASE
         // ========================================
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            document.documentElement.classList.add('dark');
-        }
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
-            if (event.matches) {
-                document.documentElement.classList.add('dark');
-            } else {
-                document.documentElement.classList.remove('dark');
-            }
-        });
+        const SUPABASE_URL = 'https://icmwollqqgpefwovhwdm.supabase.co'; // CAMBIAR POR TU URL
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImljbXdvbGxxcWdwZWZ3b3Zod2RtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE5NTA0MDksImV4cCI6MjA3NzUyNjQwOX0.5r9SoLu-Ir3uLCOKBfLnyysgM35N1WSYQonLmkkX5yY'; // CAMBIAR POR TU KEY
+        
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         // ========================================
-        // 2. GESTIÓN DE DATOS (Almacenamiento en Memoria)
+        // UTILIDADES Y NOTIFICACIONES
         // ========================================
-        const AppStorage = {
-            users: [
-                {
-                    id: '1',
-                    email: 'admin@barberia.com',
-                    password: 'admin123', // En producción usar BCrypt
-                    nombre: 'Administrador',
-                    rol: 'ADMIN'
-                },
-                {
-                    id: '2',
-                    email: 'cliente@test.com',
-                    password: 'cliente123',
-                    nombre: 'Juan Pérez',
-                    rol: 'CLIENTE'
-                }
-            ],
-            servicios: [
-                { id: '1', nombre: 'Corte Clásico', duracion: 30, precio: 15 },
-                { id: '2', nombre: 'Corte + Barba', duracion: 45, precio: 25 },
-                { id: '3', nombre: 'Afeitado Tradicional', duracion: 30, precio: 20 }
-            ],
-            barberos: [],
-            citas: [],
-            currentUser: null
-        };
-
-        class DataManager {
-            static initializeData() {
-                // Datos ya inicializados en AppStorage
-            }
-
-            static getUsers() {
-                return AppStorage.users;
-            }
-
-            static setUsers(users) {
-                AppStorage.users = users;
-            }
-
-            static getServicios() {
-                return AppStorage.servicios;
-            }
-
-            static setServicios(servicios) {
-                AppStorage.servicios = servicios;
-            }
-
-            static getBarberos() {
-                return AppStorage.barberos;
-            }
-
-            static setBarberos(barberos) {
-                AppStorage.barberos = barberos;
-            }
-
-            static getCitas() {
-                return AppStorage.citas;
-            }
-
-            static setCitas(citas) {
-                AppStorage.citas = citas;
-            }
-
-            static getCurrentUser() {
-                return AppStorage.currentUser;
-            }
-
-            static login(email, password) {
-                const users = this.getUsers();
-                const user = users.find(u => u.email === email && u.password === password);
-                if (user) {
-                    // Guardar usuario actual en memoria
-                    AppStorage.currentUser = {
-                        id: user.id,
-                        email: user.email,
-                        nombre: user.nombre,
-                        rol: user.rol
-                    };
-                    return true;
-                }
-                return false;
-            }
-
-            static register(email, password, nombre) {
-                const users = this.getUsers();
-                if (users.find(u => u.email === email)) {
-                    return { success: false, message: 'El email ya está registrado' };
-                }
-                const newUser = {
-                    id: Date.now().toString(),
-                    email,
-                    password,
-                    nombre,
-                    rol: 'CLIENTE'
+        class Notifier {
+            static show(message, type = 'success') {
+                const container = document.getElementById('notifications');
+                const notification = document.createElement('div');
+                
+                const colors = {
+                    success: 'bg-green-600',
+                    error: 'bg-red-600',
+                    warning: 'bg-yellow-600',
+                    info: 'bg-blue-600'
                 };
-                users.push(newUser);
-                this.setUsers(users);
-                return { success: true, message: 'Usuario registrado exitosamente' };
+                
+                notification.className = `notification ${colors[type]} text-white px-6 py-4 rounded-lg shadow-2xl flex items-center space-x-3`;
+                notification.innerHTML = `
+                    <span class="text-2xl">${type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ'}</span>
+                    <span class="font-medium">${message}</span>
+                `;
+                
+                container.appendChild(notification);
+                
+                setTimeout(() => {
+                    notification.style.animation = 'slideInRight 0.3s ease-out reverse';
+                    setTimeout(() => notification.remove(), 300);
+                }, 3000);
             }
+        }
 
-            static logout() {
-                AppStorage.currentUser = null;
+        class Loader {
+            static show() {
+                const loader = document.createElement('div');
+                loader.id = 'global-loader';
+                loader.className = 'fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50';
+                loader.innerHTML = `
+                    <div class="text-center">
+                        <div class="loader mx-auto mb-4"></div>
+                        <p class="text-primary font-medium">Cargando...</p>
+                    </div>
+                `;
+                document.body.appendChild(loader);
+            }
+            
+            static hide() {
+                const loader = document.getElementById('global-loader');
+                if (loader) loader.remove();
             }
         }
 
         // ========================================
-        // 3. COMPONENTES UI
+        // GESTOR DE DATOS CON SUPABASE
+        // ========================================
+        class DataManager {
+            static async init() {
+                // Crear tablas si no existen (ejecutar una sola vez en Supabase SQL Editor)
+                console.log('Inicializando base de datos...');
+            }
+
+            // AUTENTICACIÓN
+            static async login(email, password) {
+                try {
+                    const { data: user, error } = await supabase
+                        .from('usuarios')
+                        .select('*')
+                        .eq('email', email)
+                        .eq('password', password) // En producción usar bcrypt
+                        .single();
+                    
+                    if (error || !user) return null;
+                    
+                    await window.storage.set('currentUser', JSON.stringify(user));
+                    return user;
+                } catch (error) {
+                    console.error('Error login:', error);
+                    return null;
+                }
+            }
+
+            static async register(email, password, nombre) {
+                try {
+                    const { data: existing } = await supabase
+                        .from('usuarios')
+                        .select('id')
+                        .eq('email', email)
+                        .single();
+                    
+                    if (existing) {
+                        return { success: false, message: 'El email ya está registrado' };
+                    }
+
+                    const { data, error } = await supabase
+                        .from('usuarios')
+                        .insert([{ email, password, nombre, rol: 'CLIENTE' }])
+                        .select()
+                        .single();
+                    
+                    if (error) throw error;
+                    
+                    return { success: true, message: 'Usuario registrado exitosamente' };
+                } catch (error) {
+                    console.error('Error registro:', error);
+                    return { success: false, message: 'Error al registrar usuario' };
+                }
+            }
+
+            static async getCurrentUser() {
+                try {
+                    const stored = await window.storage.get('currentUser');
+                    return stored ? JSON.parse(stored.value) : null;
+                } catch {
+                    return null;
+                }
+            }
+
+            static async logout() {
+                await window.storage.delete('currentUser');
+            }
+
+            // SERVICIOS
+            static async getServicios() {
+                try {
+                    const { data, error } = await supabase
+                        .from('servicios')
+                        .select('*')
+                        .order('nombre');
+                    return data || [];
+                } catch (error) {
+                    console.error('Error obteniendo servicios:', error);
+                    return [];
+                }
+            }
+
+            static async saveServicio(servicio) {
+                try {
+                    if (servicio.id) {
+                        const { error } = await supabase
+                            .from('servicios')
+                            .update(servicio)
+                            .eq('id', servicio.id);
+                        if (error) throw error;
+                    } else {
+                        const { error } = await supabase
+                            .from('servicios')
+                            .insert([servicio]);
+                        if (error) throw error;
+                    }
+                    return true;
+                } catch (error) {
+                    console.error('Error guardando servicio:', error);
+                    return false;
+                }
+            }
+
+            static async deleteServicio(id) {
+                try {
+                    const { error } = await supabase
+                        .from('servicios')
+                        .delete()
+                        .eq('id', id);
+                    return !error;
+                } catch (error) {
+                    console.error('Error eliminando servicio:', error);
+                    return false;
+                }
+            }
+
+            // BARBEROS
+            static async getBarberos() {
+                try {
+                    const { data, error } = await supabase
+                        .from('barberos')
+                        .select(`
+                            *,
+                            usuario:usuarios(*)
+                        `);
+                    return data || [];
+                } catch (error) {
+                    console.error('Error obteniendo barberos:', error);
+                    return [];
+                }
+            }
+
+            // CITAS
+            static async getCitas() {
+                try {
+                    const { data, error } = await supabase
+                        .from('citas')
+                        .select(`
+                            *,
+                            servicio:servicios(*),
+                            cliente:usuarios!cliente_id(*),
+                            barbero:barberos(*, usuario:usuarios(*))
+                        `)
+                        .order('fecha_hora', { ascending: false });
+                    return data || [];
+                } catch (error) {
+                    console.error('Error obteniendo citas:', error);
+                    return [];
+                }
+            }
+
+            static async saveCita(cita) {
+                try {
+                    if (cita.id) {
+                        const { error } = await supabase
+                            .from('citas')
+                            .update(cita)
+                            .eq('id', cita.id);
+                        if (error) throw error;
+                    } else {
+                        const { error } = await supabase
+                            .from('citas')
+                            .insert([cita]);
+                        if (error) throw error;
+                    }
+                    return true;
+                } catch (error) {
+                    console.error('Error guardando cita:', error);
+                    return false;
+                }
+            }
+
+            // INVENTARIO
+            static async getInventario() {
+                try {
+                    const { data, error } = await supabase
+                        .from('inventario')
+                        .select('*')
+                        .order('nombre');
+                    return data || [];
+                } catch (error) {
+                    console.error('Error obteniendo inventario:', error);
+                    return [];
+                }
+            }
+
+            static async saveInventario(item) {
+                try {
+                    if (item.id) {
+                        const { error } = await supabase
+                            .from('inventario')
+                            .update(item)
+                            .eq('id', item.id);
+                        if (error) throw error;
+                    } else {
+                        const { error } = await supabase
+                            .from('inventario')
+                            .insert([item]);
+                        if (error) throw error;
+                    }
+                    return true;
+                } catch (error) {
+                    console.error('Error guardando inventario:', error);
+                    return false;
+                }
+            }
+        }
+
+        // ========================================
+        // APLICACIÓN PRINCIPAL
         // ========================================
         class App {
             constructor() {
-                DataManager.initializeData();
                 this.currentView = 'login';
-                this.render();
+                this.currentUser = null;
+                this.init();
             }
 
-            render() {
-                const user = DataManager.getCurrentUser();
+            async init() {
+                Loader.show();
+                this.currentUser = await DataManager.getCurrentUser();
+                if (this.currentUser) {
+                    this.currentView = 'home';
+                }
+                await this.render();
+                Loader.hide();
+            }
+
+            async render() {
                 const appDiv = document.getElementById('app');
 
-                if (!user) {
+                if (!this.currentUser) {
                     appDiv.innerHTML = this.renderLogin();
                     this.attachLoginEvents();
                 } else {
-                    appDiv.innerHTML = this.renderDashboard(user);
-                    this.attachDashboardEvents(user);
+                    appDiv.innerHTML = await this.renderDashboard();
+                    this.attachDashboardEvents();
                 }
             }
 
             renderLogin() {
                 return `
-                    <div class="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-primary/10 to-purple-100 dark:from-primary/20 dark:to-purple-900/20">
-                        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-md fade-in">
+                    <div class="min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
+                        <div class="absolute inset-0 opacity-10">
+                            <div class="absolute top-20 left-10 w-72 h-72 bg-primary rounded-full blur-3xl"></div>
+                            <div class="absolute bottom-20 right-10 w-96 h-96 bg-secondary rounded-full blur-3xl"></div>
+                        </div>
+                        
+                        <div class="bg-dark-card border border-primary/20 rounded-2xl shadow-2xl glow p-8 w-full max-w-md relative z-10 slide-in">
                             <div class="text-center mb-8">
-                                <h1 class="text-4xl font-bold text-primary mb-2">✂️ Barbería Pro</h1>
-                                <p class="text-gray-600 dark:text-gray-400">Sistema de Gestión de Citas</p>
+                                <div class="inline-block gradient-gold text-transparent bg-clip-text mb-4">
+                                    <h1 class="text-5xl font-display font-bold">✂️</h1>
+                                </div>
+                                <h1 class="text-4xl font-display font-bold gradient-gold text-transparent bg-clip-text mb-2">Barbería Pro</h1>
+                                <p class="text-gray-400 font-light">Sistema de Gestión Premium</p>
                             </div>
 
                             <div class="mb-6">
-                                <div class="flex rounded-lg bg-gray-100 dark:bg-gray-700 p-1">
-                                    <button id="tab-login" class="flex-1 py-2 px-4 rounded-md text-base font-medium transition-all bg-white dark:bg-gray-600 text-primary shadow">
+                                <div class="flex rounded-lg bg-dark-lighter p-1">
+                                    <button id="tab-login" class="flex-1 py-3 px-4 rounded-md font-medium transition-all bg-primary text-dark shadow-lg">
                                         Iniciar Sesión
                                     </button>
-                                    <button id="tab-register" class="flex-1 py-2 px-4 rounded-md text-base font-medium transition-all text-gray-600 dark:text-gray-300">
+                                    <button id="tab-register" class="flex-1 py-3 px-4 rounded-md font-medium transition-all text-gray-400 hover:text-primary">
                                         Registrarse
                                     </button>
                                 </div>
                             </div>
 
-                            <!-- Login Form -->
                             <div id="login-form">
                                 <div class="space-y-4">
                                     <div>
-                                        <label class="block text-sm font-medium mb-2">Email</label>
-                                        <input type="email" id="login-email" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-base focus:ring-2 focus:ring-primary focus:border-transparent transition-all" placeholder="tu@email.com" value="admin@barberia.com">
+                                        <label class="block text-sm font-medium mb-2 text-gray-300">Email</label>
+                                        <input type="email" id="login-email" class="w-full px-4 py-3 rounded-lg bg-dark-lighter border border-primary/30 focus:border-primary focus:ring-2 focus:ring-primary/50 transition-all text-white placeholder-gray-500" placeholder="tu@email.com">
                                     </div>
                                     <div>
-                                        <label class="block text-sm font-medium mb-2">Contraseña</label>
-                                        <input type="password" id="login-password" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-base focus:ring-2 focus:ring-primary focus:border-transparent transition-all" placeholder="••••••••" value="admin123">
+                                        <label class="block text-sm font-medium mb-2 text-gray-300">Contraseña</label>
+                                        <input type="password" id="login-password" class="w-full px-4 py-3 rounded-lg bg-dark-lighter border border-primary/30 focus:border-primary focus:ring-2 focus:ring-primary/50 transition-all text-white placeholder-gray-500" placeholder="••••••••">
                                     </div>
-                                    <div id="login-error" class="hidden text-red-500 text-sm"></div>
-                                    <button id="btn-login" class="w-full bg-primary hover:bg-primary/90 text-white font-semibold py-3 px-6 rounded-lg transition-all shadow-lg hover:shadow-xl">
-                                        Iniciar Sesión
+                                    <button id="btn-login" class="w-full gradient-gold text-dark font-bold py-3 px-6 rounded-lg transition-all shadow-lg hover:shadow-xl glow-strong">
+                                        INICIAR SESIÓN
                                     </button>
                                 </div>
 
-                                <div class="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                                    <p class="text-sm font-semibold mb-2">Usuarios de prueba:</p>
-                                    <p class="text-xs text-gray-600 dark:text-gray-400">
+                                <div class="mt-6 p-4 bg-primary/10 border border-primary/20 rounded-lg">
+                                    <p class="text-sm font-semibold mb-2 text-primary">Demo (usar estos datos):</p>
+                                    <p class="text-xs text-gray-400">
                                         <strong>Admin:</strong> admin@barberia.com / admin123<br>
                                         <strong>Cliente:</strong> cliente@test.com / cliente123
                                     </p>
                                 </div>
                             </div>
 
-                            <!-- Register Form -->
                             <div id="register-form" class="hidden">
                                 <div class="space-y-4">
                                     <div>
-                                        <label class="block text-sm font-medium mb-2">Nombre Completo</label>
-                                        <input type="text" id="register-nombre" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-base focus:ring-2 focus:ring-primary focus:border-transparent transition-all" placeholder="Juan Pérez">
+                                        <label class="block text-sm font-medium mb-2 text-gray-300">Nombre Completo</label>
+                                        <input type="text" id="register-nombre" class="w-full px-4 py-3 rounded-lg bg-dark-lighter border border-primary/30 focus:border-primary focus:ring-2 focus:ring-primary/50 transition-all text-white" placeholder="Juan Pérez">
                                     </div>
                                     <div>
-                                        <label class="block text-sm font-medium mb-2">Email</label>
-                                        <input type="email" id="register-email" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-base focus:ring-2 focus:ring-primary focus:border-transparent transition-all" placeholder="tu@email.com">
+                                        <label class="block text-sm font-medium mb-2 text-gray-300">Email</label>
+                                        <input type="email" id="register-email" class="w-full px-4 py-3 rounded-lg bg-dark-lighter border border-primary/30 focus:border-primary focus:ring-2 focus:ring-primary/50 transition-all text-white" placeholder="tu@email.com">
                                     </div>
                                     <div>
-                                        <label class="block text-sm font-medium mb-2">Contraseña</label>
-                                        <input type="password" id="register-password" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-base focus:ring-2 focus:ring-primary focus:border-transparent transition-all" placeholder="••••••••">
+                                        <label class="block text-sm font-medium mb-2 text-gray-300">Contraseña</label>
+                                        <input type="password" id="register-password" class="w-full px-4 py-3 rounded-lg bg-dark-lighter border border-primary/30 focus:border-primary focus:ring-2 focus:ring-primary/50 transition-all text-white" placeholder="••••••••">
                                     </div>
-                                    <div id="register-error" class="hidden text-red-500 text-sm"></div>
-                                    <div id="register-success" class="hidden text-green-500 text-sm"></div>
-                                    <button id="btn-register" class="w-full bg-primary hover:bg-primary/90 text-white font-semibold py-3 px-6 rounded-lg transition-all shadow-lg hover:shadow-xl">
-                                        Crear Cuenta
+                                    <button id="btn-register" class="w-full gradient-gold text-dark font-bold py-3 px-6 rounded-lg transition-all shadow-lg hover:shadow-xl glow-strong">
+                                        CREAR CUENTA
                                     </button>
                                 </div>
                             </div>
@@ -252,35 +490,29 @@
                 `;
             }
 
-            renderDashboard(user) {
-                const navigation = this.renderNavigation(user);
+            async renderDashboard() {
+                const navigation = this.renderNavigation();
                 let content = '';
 
                 switch(this.currentView) {
                     case 'servicios':
-                        content = this.renderServicios();
+                        content = await this.renderServicios();
                         break;
-                    case 'barberos':
-                        content = this.renderBarberos();
+                    case 'inventario':
+                        content = await this.renderInventario();
                         break;
                     case 'reservar':
-                        content = this.renderReservar();
+                        content = await this.renderReservar();
                         break;
                     case 'mis-citas':
-                        content = this.renderMisCitas(user);
-                        break;
-                    case 'asignar-citas':
-                        content = this.renderAsignarCitas();
-                        break;
-                    case 'citas-barbero':
-                        content = this.renderCitasBarbero(user);
+                        content = await this.renderMisCitas();
                         break;
                     default:
-                        content = this.renderHome(user);
+                        content = await this.renderHome();
                 }
 
                 return `
-                    <div class="min-h-screen bg-gray-50 dark:bg-[#181818]">
+                    <div class="min-h-screen bg-dark">
                         ${navigation}
                         <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                             ${content}
@@ -289,31 +521,32 @@
                 `;
             }
 
-            renderNavigation(user) {
-                const menuItems = [];
+            renderNavigation() {
+                const menuItems = [
+                    { name: 'Inicio', view: 'home', icon: '🏠' }
+                ];
 
-                menuItems.push({ name: 'Inicio', view: 'home', icon: '🏠' });
-
-                if (user.rol === 'ADMIN') {
-                    menuItems.push({ name: 'Servicios', view: 'servicios', icon: '✂️' });
-                    menuItems.push({ name: 'Barberos', view: 'barberos', icon: '👨‍💼' });
-                    menuItems.push({ name: 'Asignar Citas', view: 'asignar-citas', icon: '📋' });
-                } else if (user.rol === 'CLIENTE') {
-                    menuItems.push({ name: 'Reservar Cita', view: 'reservar', icon: '📅' });
-                    menuItems.push({ name: 'Mis Citas', view: 'mis-citas', icon: '📋' });
-                } else if (user.rol === 'BARBERO') {
-                    menuItems.push({ name: 'Mis Citas', view: 'citas-barbero', icon: '📋' });
+                if (this.currentUser.rol === 'ADMIN') {
+                    menuItems.push(
+                        { name: 'Servicios', view: 'servicios', icon: '✂️' },
+                        { name: 'Inventario', view: 'inventario', icon: '📦' }
+                    );
+                } else if (this.currentUser.rol === 'CLIENTE') {
+                    menuItems.push(
+                        { name: 'Reservar', view: 'reservar', icon: '📅' },
+                        { name: 'Mis Citas', view: 'mis-citas', icon: '📋' }
+                    );
                 }
 
                 return `
-                    <nav class="bg-white dark:bg-gray-800 shadow-lg">
+                    <nav class="bg-dark-card border-b border-primary/20 glow sticky top-0 z-40 backdrop-blur-lg">
                         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                             <div class="flex justify-between items-center h-16">
                                 <div class="flex items-center space-x-8">
-                                    <h1 class="text-2xl font-bold text-primary">✂️ Barbería Pro</h1>
-                                    <div class="hidden md:flex space-x-4">
+                                    <h1 class="text-2xl font-display font-bold gradient-gold text-transparent bg-clip-text">✂️ Barbería Pro</h1>
+                                    <div class="hidden md:flex space-x-2">
                                         ${menuItems.map(item => `
-                                            <button class="nav-item px-4 py-2 rounded-lg text-base font-medium transition-all ${this.currentView === item.view ? 'bg-primary text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}" data-view="${item.view}">
+                                            <button class="nav-item px-4 py-2 rounded-lg font-medium transition-all ${this.currentView === item.view ? 'bg-primary text-dark' : 'text-gray-400 hover:text-primary hover:bg-dark-lighter'}" data-view="${item.view}">
                                                 ${item.icon} ${item.name}
                                             </button>
                                         `).join('')}
@@ -321,10 +554,10 @@
                                 </div>
                                 <div class="flex items-center space-x-4">
                                     <div class="text-right">
-                                        <p class="text-sm font-medium">${user.nombre}</p>
-                                        <p class="text-xs text-gray-500 dark:text-gray-400">${user.rol}</p>
+                                        <p class="text-sm font-medium text-primary">${this.currentUser.nombre}</p>
+                                        <p class="text-xs text-gray-400">${this.currentUser.rol}</p>
                                     </div>
-                                    <button id="btn-logout" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-all text-base">
+                                    <button id="btn-logout" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all font-medium">
                                         Salir
                                     </button>
                                 </div>
@@ -334,52 +567,42 @@
                 `;
             }
 
-            renderHome(user) {
-                const servicios = DataManager.getServicios();
-                const barberos = DataManager.getBarberos();
-                const citas = DataManager.getCitas();
+            async renderHome() {
+                const servicios = await DataManager.getServicios();
+                const citas = await DataManager.getCitas();
+                const inventario = await DataManager.getInventario();
 
                 return `
-                    <div class="fade-in">
-                        <h2 class="text-3xl font-bold mb-8">Bienvenido, ${user.nombre}</h2>
+                    <div class="slide-in">
+                        <h2 class="text-4xl font-display font-bold mb-8 gradient-gold text-transparent bg-clip-text">
+                            Bienvenido, ${this.currentUser.nombre}
+                        </h2>
 
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-                                <div class="flex items-center justify-between">
-                                    <div>
-                                        <p class="text-gray-500 dark:text-gray-400 text-sm">Servicios</p>
-                                        <p class="text-3xl font-bold text-primary">${servicios.length}</p>
+                            ${[
+                                { label: 'Servicios', value: servicios.length, icon: '✂️', color: 'from-yellow-600 to-yellow-400' },
+                                { label: 'Citas', value: citas.length, icon: '📅', color: 'from-blue-600 to-blue-400' },
+                                { label: 'Inventario', value: inventario.length, icon: '📦', color: 'from-purple-600 to-purple-400' }
+                            ].map(stat => `
+                                <div class="bg-dark-card border border-primary/20 rounded-xl shadow-lg p-6 card-hover glow">
+                                    <div class="flex items-center justify-between">
+                                        <div>
+                                            <p class="text-gray-400 text-sm mb-1">${stat.label}</p>
+                                            <p class="text-4xl font-bold text-primary">${stat.value}</p>
+                                        </div>
+                                        <div class="text-6xl opacity-20">${stat.icon}</div>
                                     </div>
-                                    <div class="text-5xl">✂️</div>
                                 </div>
-                            </div>
-                            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-                                <div class="flex items-center justify-between">
-                                    <div>
-                                        <p class="text-gray-500 dark:text-gray-400 text-sm">Barberos</p>
-                                        <p class="text-3xl font-bold text-primary">${barberos.length}</p>
-                                    </div>
-                                    <div class="text-5xl">👨‍💼</div>
-                                </div>
-                            </div>
-                            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-                                <div class="flex items-center justify-between">
-                                    <div>
-                                        <p class="text-gray-500 dark:text-gray-400 text-sm">Citas</p>
-                                        <p class="text-3xl font-bold text-primary">${citas.length}</p>
-                                    </div>
-                                    <div class="text-5xl">📅</div>
-                                </div>
-                            </div>
+                            `).join('')}
                         </div>
 
-                        <div class="bg-gradient-to-r from-primary to-purple-600 rounded-xl shadow-lg p-8 text-white">
-                            <h3 class="text-2xl font-bold mb-4">Nuestros Servicios</h3>
+                        <div class="bg-gradient-to-r ${this.currentUser.rol === 'ADMIN' ? 'from-primary/20 to-secondary/20' : 'from-blue-600/20 to-purple-600/20'} border border-primary/30 rounded-xl shadow-lg p-8 glow">
+                            <h3 class="text-2xl font-display font-bold mb-4 text-primary">Nuestros Servicios Premium</h3>
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                ${servicios.map(s => `
-                                    <div class="bg-white/10 backdrop-blur rounded-lg p-4">
-                                        <h4 class="font-semibold mb-2">${s.nombre}</h4>
-                                        <p class="text-sm opacity-90">⏱️ ${s.duracion} min | 💰 $${s.precio}</p>
+                                ${servicios.slice(0, 6).map(s => `
+                                    <div class="bg-dark-card/50 backdrop-blur rounded-lg p-4 border border-primary/20">
+                                        <h4 class="font-semibold mb-2 text-white">${s.nombre}</h4>
+                                        <p class="text-sm text-gray-400">⏱️ ${s.duracion} min | 💰 $${s.precio}</p>
                                     </div>
                                 `).join('')}
                             </div>
@@ -388,31 +611,31 @@
                 `;
             }
 
-            renderServicios() {
-                const servicios = DataManager.getServicios();
+            async renderServicios() {
+                const servicios = await DataManager.getServicios();
                 return `
-                    <div class="fade-in">
+                    <div class="slide-in">
                         <div class="flex justify-between items-center mb-8">
-                            <h2 class="text-3xl font-bold">Gestión de Servicios</h2>
-                            <button id="btn-add-servicio" class="px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg transition-all shadow-lg text-base font-medium">
-                                + Nuevo Servicio
+                            <h2 class="text-3xl font-display font-bold gradient-gold text-transparent bg-clip-text">Gestión de Servicios</h2>
+                            <button id="btn-add-servicio" class="px-6 py-3 gradient-gold text-dark rounded-lg font-bold transition-all shadow-lg hover:shadow-xl glow-strong">
+                                + NUEVO SERVICIO
                             </button>
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             ${servicios.map(s => `
-                                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 hover:shadow-xl transition-all">
+                                <div class="bg-dark-card border border-primary/20 rounded-xl shadow-lg p-6 card-hover glow">
                                     <div class="flex justify-between items-start mb-4">
-                                        <div>
-                                            <h3 class="text-xl font-bold mb-2">${s.nombre}</h3>
+                                        <div class="flex-1">
+                                            <h3 class="text-xl font-bold mb-2 text-primary">${s.nombre}</h3>
                                             <div class="space-y-1">
-                                                <p class="text-gray-600 dark:text-gray-400">⏱️ Duración: ${s.duracion} min</p>
-                                                <p class="text-primary font-bold text-lg">💰 $${s.precio}</p>
+                                                <p class="text-gray-400">⏱️ ${s.duracion} minutos</p>
+                                                <p class="text-2xl font-bold text-primary">$${s.precio}</p>
                                             </div>
                                         </div>
                                         <div class="flex space-x-2">
-                                            <button class="btn-edit-servicio p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all" data-id="${s.id}">✏️</button>
-                                            <button class="btn-delete-servicio p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all" data-id="${s.id}">🗑️</button>
+                                            <button class="btn-edit-servicio p-2 text-blue-400 hover:bg-blue-900/20 rounded-lg transition-all" data-id="${s.id}">✏️</button>
+                                            <button class="btn-delete-servicio p-2 text-red-400 hover:bg-red-900/20 rounded-lg transition-all" data-id="${s.id}">🗑️</button>
                                         </div>
                                     </div>
                                 </div>
@@ -422,81 +645,70 @@
                 `;
             }
 
-            renderBarberos() {
-                const barberos = DataManager.getBarberos();
-                const users = DataManager.getUsers();
-
+            async renderInventario() {
+                const items = await DataManager.getInventario();
                 return `
-                    <div class="fade-in">
+                    <div class="slide-in">
                         <div class="flex justify-between items-center mb-8">
-                            <h2 class="text-3xl font-bold">Gestión de Barberos</h2>
-                            <button id="btn-add-barbero" class="px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg transition-all shadow-lg text-base font-medium">
-                                + Nuevo Barbero
+                            <h2 class="text-3xl font-display font-bold gradient-gold text-transparent bg-clip-text">Gestión de Inventario</h2>
+                            <button id="btn-add-inventario" class="px-6 py-3 gradient-gold text-dark rounded-lg font-bold transition-all shadow-lg hover:shadow-xl glow-strong">
+                                + NUEVO PRODUCTO
                             </button>
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            ${barberos.map(b => {
-                                const user = users.find(u => u.id === b.usuario_id);
-                                return `
-                                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 hover:shadow-xl transition-all">
-                                        <div class="flex justify-between items-start mb-4">
-                                            <div class="flex-1">
-                                                <div class="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center text-3xl mb-3">
-                                                    👨‍💼
-                                                </div>
-                                                <h3 class="text-xl font-bold mb-2">${user ? user.nombre : 'Usuario no encontrado'}</h3>
-                                                <div class="space-y-1">
-                                                    <p class="text-gray-600 dark:text-gray-400 text-sm">📧 ${user ? user.email : ''}</p>
-                                                    <p class="text-gray-600 dark:text-gray-400 text-sm">🕐 ${b.horario_inicio} - ${b.horario_fin}</p>
-                                                </div>
-                                            </div>
-                                            <div class="flex space-x-2">
-                                                <button class="btn-edit-barbero p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all" data-id="${b.id}">✏️</button>
-                                                <button class="btn-delete-barbero p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all" data-id="${b.id}">🗑️</button>
-                                            </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                            ${items.map(item => `
+                                <div class="bg-dark-card border ${item.cantidad <= item.minimo ? 'border-red-500' : 'border-primary/20'} rounded-xl shadow-lg p-6 card-hover glow">
+                                    ${item.cantidad <= item.minimo ? '<div class="bg-red-600/20 text-red-400 px-3 py-1 rounded-full text-xs font-bold mb-3 inline-block">⚠️ STOCK BAJO</div>' : ''}
+                                    <h3 class="text-lg font-bold mb-2 text-primary">${item.nombre}</h3>
+                                    <div class="space-y-2">
+                                        <p class="text-gray-400 text-sm">${item.descripcion || 'Sin descripción'}</p>
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-2xl font-bold text-primary">${item.cantidad}</span>
+                                            <span class="text-xs text-gray-500">Mín: ${item.minimo}</span>
                                         </div>
                                     </div>
-                                `;
-                            }).join('')}
+                                    <div class="flex space-x-2 mt-4">
+                                        <button class="btn-edit-inventario flex-1 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm transition-all" data-id="${item.id}">✏️</button>
+                                        <button class="btn-delete-inventario flex-1 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm transition-all" data-id="${item.id}">🗑️</button>
+                                    </div>
+                                </div>
+                            `).join('')}
                         </div>
                     </div>
                 `;
             }
 
-            renderReservar() {
-                const servicios = DataManager.getServicios();
+            async renderReservar() {
+                const servicios = await DataManager.getServicios();
                 return `
-                    <div class="fade-in max-w-2xl mx-auto">
-                        <h2 class="text-3xl font-bold mb-8">Reservar Cita</h2>
+                    <div class="slide-in max-w-3xl mx-auto">
+                        <h2 class="text-3xl font-display font-bold mb-8 gradient-gold text-transparent bg-clip-text">Reservar Cita</h2>
 
-                        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8">
+                        <div class="bg-dark-card border border-primary/20 rounded-xl shadow-lg p-8 glow">
                             <div class="space-y-6">
                                 <div>
-                                    <label class="block text-sm font-medium mb-2">Servicio</label>
-                                    <select id="select-servicio" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-base focus:ring-2 focus:ring-primary focus:border-transparent transition-all">
+                                    <label class="block text-sm font-medium mb-2 text-gray-300">Servicio</label>
+                                    <select id="select-servicio" class="w-full px-4 py-3 rounded-lg bg-dark-lighter border border-primary/30 focus:border-primary focus:ring-2 focus:ring-primary/50 transition-all text-white">
                                         <option value="">Seleccione un servicio</option>
                                         ${servicios.map(s => `
-                                            <option value="${s.id}" data-duracion="${s.duracion}">${s.nombre} - $${s.precio} (${s.duracion} min)</option>
+                                            <option value="${s.id}" data-duracion="${s.duracion}">${s.nombre} - ${s.precio} (${s.duracion} min)</option>
                                         `).join('')}
                                     </select>
                                 </div>
 
                                 <div>
-                                    <label class="block text-sm font-medium mb-2">Fecha</label>
-                                    <input type="date" id="input-fecha" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-base focus:ring-2 focus:ring-primary focus:border-transparent transition-all">
+                                    <label class="block text-sm font-medium mb-2 text-gray-300">Fecha</label>
+                                    <input type="date" id="input-fecha" class="w-full px-4 py-3 rounded-lg bg-dark-lighter border border-primary/30 focus:border-primary focus:ring-2 focus:ring-primary/50 transition-all text-white">
                                 </div>
 
                                 <div id="horarios-disponibles" class="hidden">
-                                    <label class="block text-sm font-medium mb-2">Horarios Disponibles</label>
+                                    <label class="block text-sm font-medium mb-2 text-gray-300">Horarios Disponibles</label>
                                     <div id="slots-container" class="grid grid-cols-3 sm:grid-cols-4 gap-3"></div>
                                 </div>
 
-                                <div id="reserva-error" class="hidden text-red-500 text-sm"></div>
-                                <div id="reserva-success" class="hidden text-green-500 text-sm"></div>
-
-                                <button id="btn-confirmar-reserva" class="w-full bg-primary hover:bg-primary/90 text-white font-semibold py-3 px-6 rounded-lg transition-all shadow-lg text-base disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-                                    Confirmar Reserva
+                                <button id="btn-confirmar-reserva" class="w-full gradient-gold text-dark font-bold py-3 px-6 rounded-lg transition-all shadow-lg hover:shadow-xl glow-strong disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                    CONFIRMAR RESERVA
                                 </button>
                             </div>
                         </div>
@@ -504,181 +716,55 @@
                 `;
             }
 
-            renderMisCitas(user) {
-                const citas = DataManager.getCitas().filter(c => c.cliente_id === user.id);
-                const servicios = DataManager.getServicios();
-                const barberos = DataManager.getBarberos();
-                const users = DataManager.getUsers();
+            async renderMisCitas() {
+                const citas = await DataManager.getCitas();
+                const misCitas = citas.filter(c => c.cliente_id === this.currentUser.id);
 
                 return `
-                    <div class="fade-in">
-                        <h2 class="text-3xl font-bold mb-8">Mis Citas</h2>
+                    <div class="slide-in">
+                        <h2 class="text-3xl font-display font-bold mb-8 gradient-gold text-transparent bg-clip-text">Mis Citas</h2>
 
-                        ${citas.length === 0 ? `
-                            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-12 text-center">
-                                <div class="text-6xl mb-4">📅</div>
-                                <h3 class="text-xl font-semibold mb-2">No tienes citas programadas</h3>
-                                <p class="text-gray-600 dark:text-gray-400 mb-6">¡Agenda tu primera cita ahora!</p>
-                                <button class="nav-item px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg transition-all text-base font-medium" data-view="reservar">
-                                    Reservar Cita
+                        ${misCitas.length === 0 ? `
+                            <div class="bg-dark-card border border-primary/20 rounded-xl shadow-lg p-12 text-center glow">
+                                <div class="text-6xl mb-4 opacity-50">📅</div>
+                                <h3 class="text-xl font-semibold mb-2 text-primary">No tienes citas programadas</h3>
+                                <p class="text-gray-400 mb-6">¡Agenda tu primera cita ahora!</p>
+                                <button class="nav-item px-6 py-3 gradient-gold text-dark rounded-lg font-bold transition-all shadow-lg hover:shadow-xl" data-view="reservar">
+                                    RESERVAR CITA
                                 </button>
                             </div>
                         ` : `
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                ${citas.map(c => {
-                                    const servicio = servicios.find(s => s.id === c.servicio_id);
-                                    const barbero = barberos.find(b => b.id === c.barbero_id);
-                                    const barberoUser = barbero ? users.find(u => u.id === barbero.usuario_id) : null;
+                                ${misCitas.map(c => {
                                     const fecha = new Date(c.fecha_hora);
-                                    const ahora = new Date();
-                                    const isPast = fecha < ahora;
-
+                                    const isPast = fecha < new Date();
                                     return `
-                                        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 ${isPast ? 'opacity-60' : ''}">
+                                        <div class="bg-dark-card border border-primary/20 rounded-xl shadow-lg p-6 card-hover glow ${isPast ? 'opacity-60' : ''}">
                                             <div class="flex justify-between items-start mb-4">
-                                                <div class="flex-1">
-                                                    <div class="flex items-center space-x-2 mb-2">
-                                                        <span class="px-3 py-1 rounded-full text-xs font-semibold ${c.estado_asignacion === 'ASIGNADO' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'}">
-                                                            ${c.estado_asignacion}
-                                                        </span>
-                                                        ${isPast ? '<span class="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400">PASADA</span>' : ''}
-                                                    </div>
-                                                    <h3 class="text-xl font-bold mb-2">${servicio ? servicio.nombre : 'Servicio eliminado'}</h3>
-                                                    <div class="space-y-1 text-sm">
-                                                        <p class="text-gray-600 dark:text-gray-400">📅 ${fecha.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                                                        <p class="text-gray-600 dark:text-gray-400">🕐 ${fecha.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</p>
-                                                        ${barberoUser ? `<p class="text-gray-600 dark:text-gray-400">👨‍💼 Barbero: ${barberoUser.nombre}</p>` : '<p class="text-gray-600 dark:text-gray-400">👨‍💼 Barbero: Por asignar</p>'}
-                                                        ${servicio ? `<p class="text-primary font-bold">💰 $${servicio.precio}</p>` : ''}
-                                                    </div>
+                                                <div>
+                                                    <span class="px-3 py-1 rounded-full text-xs font-semibold ${c.estado_asignacion === 'ASIGNADO' ? 'bg-green-600/20 text-green-400' : 'bg-yellow-600/20 text-yellow-400'}">
+                                                        ${c.estado_asignacion}
+                                                    </span>
+                                                    ${isPast ? '<span class="ml-2 px-3 py-1 rounded-full text-xs font-semibold bg-gray-600/20 text-gray-400">PASADA</span>' : ''}
                                                 </div>
                                             </div>
-                                            ${!isPast ? `
-                                                <button class="btn-cancelar-cita w-full mt-4 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-all text-base" data-id="${c.id}">
+                                            <h3 class="text-xl font-bold mb-2 text-primary">${c.servicio?.nombre || 'Servicio eliminado'}</h3>
+                                            <div class="space-y-1 text-sm text-gray-400">
+                                                <p>📅 ${fecha.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                                                <p>🕐 ${fecha.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</p>
+                                                ${c.barbero ? `<p>👨‍💼 ${c.barbero.usuario?.nombre || 'Barbero'}</p>` : '<p>👨‍💼 Por asignar</p>'}
+                                                ${c.servicio ? `<p class="text-primary font-bold text-lg mt-2">💰 ${c.servicio.precio}</p>` : ''}
+                                            </div>
+                                            ${!isPast && c.estado_asignacion === 'PENDIENTE' ? `
+                                                <button class="btn-cancelar-cita w-full mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all font-medium" data-id="${c.id}">
                                                     Cancelar Cita
                                                 </button>
                                             ` : ''}
-                                        </div>
-                                    `;
-                                }).join('')}
-                            </div>
-                        `}
-                    </div>
-                `;
-            }
-
-            renderAsignarCitas() {
-                const citas = DataManager.getCitas().filter(c => c.estado_asignacion === 'PENDIENTE');
-                const servicios = DataManager.getServicios();
-                const barberos = DataManager.getBarberos();
-                const users = DataManager.getUsers();
-
-                return `
-                    <div class="fade-in">
-                        <h2 class="text-3xl font-bold mb-8">Asignar Barberos a Citas Pendientes</h2>
-
-                        ${citas.length === 0 ? `
-                            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-12 text-center">
-                                <div class="text-6xl mb-4">✅</div>
-                                <h3 class="text-xl font-semibold mb-2">No hay citas pendientes de asignar</h3>
-                                <p class="text-gray-600 dark:text-gray-400">Todas las citas tienen un barbero asignado.</p>
-                            </div>
-                        ` : `
-                            <div class="space-y-6">
-                                ${citas.map(c => {
-                                    const servicio = servicios.find(s => s.id === c.servicio_id);
-                                    const cliente = users.find(u => u.id === c.cliente_id);
-                                    const fecha = new Date(c.fecha_hora);
-
-                                    return `
-                                        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                                <div>
-                                                    <h3 class="text-xl font-bold mb-4">Información de la Cita</h3>
-                                                    <div class="space-y-2 text-sm">
-                                                        <p><strong>Cliente:</strong> ${cliente ? cliente.nombre : 'Desconocido'}</p>
-                                                        <p><strong>Servicio:</strong> ${servicio ? servicio.nombre : 'Desconocido'}</p>
-                                                        <p><strong>Duración:</strong> ${servicio ? servicio.duracion : 0} min</p>
-                                                        <p><strong>Fecha:</strong> ${fecha.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                                                        <p><strong>Hora:</strong> ${fecha.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</p>
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <h3 class="text-xl font-bold mb-4">Asignar Barbero</h3>
-                                                    <select class="select-barbero-asignar w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-base focus:ring-2 focus:ring-primary focus:border-transparent transition-all mb-3" data-cita-id="${c.id}">
-                                                        <option value="">Seleccione un barbero</option>
-                                                        ${barberos.map(b => {
-                                                            const barberoUser = users.find(u => u.id === b.usuario_id);
-                                                            return `<option value="${b.id}">${barberoUser ? barberoUser.nombre : 'Desconocido'}</option>`;
-                                                        }).join('')}
-                                                    </select>
-                                                    <div class="asignar-error-${c.id} hidden text-red-500 text-sm mb-2"></div>
-                                                    <button class="btn-asignar w-full px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg transition-all text-base disabled:opacity-50" data-cita-id="${c.id}" disabled>
-                                                        Asignar Barbero
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    `;
-                                }).join('')}
-                            </div>
-                        `}
-                    </div>
-                `;
-            }
-
-            renderCitasBarbero(user) {
-                const barberos = DataManager.getBarberos();
-                const barbero = barberos.find(b => b.usuario_id === user.id);
-
-                if (!barbero) {
-                    return `
-                        <div class="fade-in">
-                            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-12 text-center">
-                                <div class="text-6xl mb-4">❌</div>
-                                <h3 class="text-xl font-semibold mb-2">No estás registrado como barbero</h3>
-                                <p class="text-gray-600 dark:text-gray-400">Contacta al administrador para obtener acceso.</p>
-                            </div>
-                        </div>
-                    `;
-                }
-
-                const citas = DataManager.getCitas().filter(c => c.barbero_id === barbero.id && c.estado_asignacion === 'ASIGNADO');
-                const servicios = DataManager.getServicios();
-                const users = DataManager.getUsers();
-
-                return `
-                    <div class="fade-in">
-                        <h2 class="text-3xl font-bold mb-8">Mis Citas Asignadas</h2>
-
-                        ${citas.length === 0 ? `
-                            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-12 text-center">
-                                <div class="text-6xl mb-4">📅</div>
-                                <h3 class="text-xl font-semibold mb-2">No tienes citas asignadas</h3>
-                                <p class="text-gray-600 dark:text-gray-400">Espera a que el administrador te asigne citas.</p>
-                            </div>
-                        ` : `
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                ${citas.map(c => {
-                                    const servicio = servicios.find(s => s.id === c.servicio_id);
-                                    const cliente = users.find(u => u.id === c.cliente_id);
-                                    const fecha = new Date(c.fecha_hora);
-                                    const ahora = new Date();
-                                    const isPast = fecha < ahora;
-
-                                    return `
-                                        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 ${isPast ? 'opacity-60' : ''}">
-                                            <div class="flex justify-between items-start mb-4">
-                                                <div class="flex-1">
-                                                    ${isPast ? '<span class="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400 mb-2 inline-block">PASADA</span>' : ''}
-                                                    <h3 class="text-xl font-bold mb-2">${servicio ? servicio.nombre : 'Servicio eliminado'}</h3>
-                                                    <div class="space-y-1 text-sm">
-                                                        <p class="text-gray-600 dark:text-gray-400">👤 Cliente: ${cliente ? cliente.nombre : 'Desconocido'}</p>
-                                                        <p class="text-gray-600 dark:text-gray-400">📅 ${fecha.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                                                        <p class="text-gray-600 dark:text-gray-400">🕐 ${fecha.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</p>
-                                                        <p class="text-gray-600 dark:text-gray-400">⏱️ Duración: ${servicio ? servicio.duracion : 0} min</p>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                            ${c.estado_asignacion === 'ASIGNADO' && !isPast ? `
+                                                <button class="btn-pagar-cita w-full mt-4 px-4 py-2 gradient-gold text-dark rounded-lg font-bold transition-all shadow-lg hover:shadow-xl" data-id="${c.id}" data-precio="${c.servicio?.precio || 0}">
+                                                    💳 PAGAR ${c.servicio?.precio || 0}
+                                                </button>
+                                            ` : ''}
                                         </div>
                                     `;
                                 }).join('')}
@@ -697,142 +783,157 @@
                 const loginForm = document.getElementById('login-form');
                 const registerForm = document.getElementById('register-form');
 
-                tabLogin.addEventListener('click', () => {
-                    tabLogin.classList.add('bg-white', 'dark:bg-gray-600', 'text-primary', 'shadow');
-                    tabLogin.classList.remove('text-gray-600', 'dark:text-gray-300');
-                    tabRegister.classList.remove('bg-white', 'dark:bg-gray-600', 'text-primary', 'shadow');
-                    tabRegister.classList.add('text-gray-600', 'dark:text-gray-300');
+                tabLogin?.addEventListener('click', () => {
+                    tabLogin.classList.add('bg-primary', 'text-dark', 'shadow-lg');
+                    tabLogin.classList.remove('text-gray-400');
+                    tabRegister.classList.remove('bg-primary', 'text-dark', 'shadow-lg');
+                    tabRegister.classList.add('text-gray-400');
                     loginForm.classList.remove('hidden');
                     registerForm.classList.add('hidden');
                 });
 
-                tabRegister.addEventListener('click', () => {
-                    tabRegister.classList.add('bg-white', 'dark:bg-gray-600', 'text-primary', 'shadow');
-                    tabRegister.classList.remove('text-gray-600', 'dark:text-gray-300');
-                    tabLogin.classList.remove('bg-white', 'dark:bg-gray-600', 'text-primary', 'shadow');
-                    tabLogin.classList.add('text-gray-600', 'dark:text-gray-300');
+                tabRegister?.addEventListener('click', () => {
+                    tabRegister.classList.add('bg-primary', 'text-dark', 'shadow-lg');
+                    tabRegister.classList.remove('text-gray-400');
+                    tabLogin.classList.remove('bg-primary', 'text-dark', 'shadow-lg');
+                    tabLogin.classList.add('text-gray-400');
                     registerForm.classList.remove('hidden');
                     loginForm.classList.add('hidden');
                 });
 
-                document.getElementById('btn-login').addEventListener('click', () => {
+                document.getElementById('btn-login')?.addEventListener('click', async () => {
                     const email = document.getElementById('login-email').value;
                     const password = document.getElementById('login-password').value;
-                    const errorDiv = document.getElementById('login-error');
 
-                    if (DataManager.login(email, password)) {
-                        this.render();
-                    } else {
-                        errorDiv.textContent = 'Email o contraseña incorrectos';
-                        errorDiv.classList.remove('hidden');
-                    }
-                });
-
-                document.getElementById('btn-register').addEventListener('click', () => {
-                    const nombre = document.getElementById('register-nombre').value;
-                    const email = document.getElementById('register-email').value;
-                    const password = document.getElementById('register-password').value;
-                    const errorDiv = document.getElementById('register-error');
-                    const successDiv = document.getElementById('register-success');
-
-                    errorDiv.classList.add('hidden');
-                    successDiv.classList.add('hidden');
-
-                    if (!nombre || !email || !password) {
-                        errorDiv.textContent = 'Por favor complete todos los campos';
-                        errorDiv.classList.remove('hidden');
+                    if (!email || !password) {
+                        Notifier.show('Por favor complete todos los campos', 'error');
                         return;
                     }
 
-                    const result = DataManager.register(email, password, nombre);
-                    if (result.success) {
-                        successDiv.textContent = result.message + ' - Ahora puedes iniciar sesión';
-                        successDiv.classList.remove('hidden');
-                        document.getElementById('register-nombre').value = '';
-                        document.getElementById('register-email').value = '';
-                        document.getElementById('register-password').value = '';
+                    Loader.show();
+                    const user = await DataManager.login(email, password);
+                    Loader.hide();
+
+                    if (user) {
+                        this.currentUser = user;
+                        this.currentView = 'home';
+                        Notifier.show('¡Bienvenido!', 'success');
+                        await this.render();
                     } else {
-                        errorDiv.textContent = result.message;
-                        errorDiv.classList.remove('hidden');
+                        Notifier.show('Email o contraseña incorrectos', 'error');
+                    }
+                });
+
+                document.getElementById('btn-register')?.addEventListener('click', async () => {
+                    const nombre = document.getElementById('register-nombre').value;
+                    const email = document.getElementById('register-email').value;
+                    const password = document.getElementById('register-password').value;
+
+                    if (!nombre || !email || !password) {
+                        Notifier.show('Por favor complete todos los campos', 'error');
+                        return;
+                    }
+
+                    Loader.show();
+                    const result = await DataManager.register(email, password, nombre);
+                    Loader.hide();
+
+                    if (result.success) {
+                        Notifier.show(result.message, 'success');
+                        tabLogin.click();
+                    } else {
+                        Notifier.show(result.message, 'error');
                     }
                 });
             }
 
-            attachDashboardEvents(user) {
+            attachDashboardEvents() {
                 document.querySelectorAll('.nav-item').forEach(item => {
-                    item.addEventListener('click', (e) => {
+                    item.addEventListener('click', async (e) => {
                         this.currentView = e.currentTarget.dataset.view;
-                        this.render();
+                        await this.render();
                     });
                 });
 
-                document.getElementById('btn-logout').addEventListener('click', () => {
-                    DataManager.logout();
+                document.getElementById('btn-logout')?.addEventListener('click', async () => {
+                    await DataManager.logout();
+                    this.currentUser = null;
                     this.currentView = 'login';
-                    this.render();
+                    Notifier.show('Sesión cerrada', 'info');
+                    await this.render();
                 });
 
                 // Eventos específicos por vista
                 if (this.currentView === 'servicios') {
                     this.attachServiciosEvents();
-                } else if (this.currentView === 'barberos') {
-                    this.attachBarberosEvents();
+                } else if (this.currentView === 'inventario') {
+                    this.attachInventarioEvents();
                 } else if (this.currentView === 'reservar') {
                     this.attachReservarEvents();
                 } else if (this.currentView === 'mis-citas') {
                     this.attachMisCitasEvents();
-                } else if (this.currentView === 'asignar-citas') {
-                    this.attachAsignarCitasEvents();
                 }
             }
 
             attachServiciosEvents() {
-                document.getElementById('btn-add-servicio').addEventListener('click', () => {
+                document.getElementById('btn-add-servicio')?.addEventListener('click', () => {
                     this.showServicioModal();
                 });
 
                 document.querySelectorAll('.btn-edit-servicio').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
+                    btn.addEventListener('click', async (e) => {
                         const id = e.currentTarget.dataset.id;
-                        const servicio = DataManager.getServicios().find(s => s.id === id);
+                        const servicios = await DataManager.getServicios();
+                        const servicio = servicios.find(s => s.id === id);
                         this.showServicioModal(servicio);
                     });
                 });
 
                 document.querySelectorAll('.btn-delete-servicio').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
+                    btn.addEventListener('click', async (e) => {
                         const id = e.currentTarget.dataset.id;
-                        this.showConfirmModal('¿Está seguro de eliminar este servicio?', () => {
-                            let servicios = DataManager.getServicios();
-                            servicios = servicios.filter(s => s.id !== id);
-                            DataManager.setServicios(servicios);
-                            this.render();
+                        this.showConfirmModal('¿Eliminar este servicio?', async () => {
+                            Loader.show();
+                            const success = await DataManager.deleteServicio(id);
+                            Loader.hide();
+                            if (success) {
+                                Notifier.show('Servicio eliminado', 'success');
+                                await this.render();
+                            } else {
+                                Notifier.show('Error al eliminar', 'error');
+                            }
                         });
                     });
                 });
             }
 
-            attachBarberosEvents() {
-                document.getElementById('btn-add-barbero').addEventListener('click', () => {
-                    this.showBarberoModal();
+            attachInventarioEvents() {
+                document.getElementById('btn-add-inventario')?.addEventListener('click', () => {
+                    this.showInventarioModal();
                 });
 
-                document.querySelectorAll('.btn-edit-barbero').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.btn-edit-inventario').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
                         const id = e.currentTarget.dataset.id;
-                        const barbero = DataManager.getBarberos().find(b => b.id === id);
-                        this.showBarberoModal(barbero);
+                        const items = await DataManager.getInventario();
+                        const item = items.find(i => i.id === id);
+                        this.showInventarioModal(item);
                     });
                 });
 
-                document.querySelectorAll('.btn-delete-barbero').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.btn-delete-inventario').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
                         const id = e.currentTarget.dataset.id;
-                        this.showConfirmModal('¿Está seguro de eliminar este barbero?', () => {
-                            let barberos = DataManager.getBarberos();
-                            barberos = barberos.filter(b => b.id !== id);
-                            DataManager.setBarberos(barberos);
-                            this.render();
+                        this.showConfirmModal('¿Eliminar este producto?', async () => {
+                            Loader.show();
+                            const { error } = await supabase.from('inventario').delete().eq('id', id);
+                            Loader.hide();
+                            if (!error) {
+                                Notifier.show('Producto eliminado', 'success');
+                                await this.render();
+                            } else {
+                                Notifier.show('Error al eliminar', 'error');
+                            }
                         });
                     });
                 });
@@ -843,14 +944,12 @@
                 const inputFecha = document.getElementById('input-fecha');
                 const horariosDiv = document.getElementById('horarios-disponibles');
                 const btnConfirmar = document.getElementById('btn-confirmar-reserva');
-
                 let selectedSlot = null;
 
-                // Establecer fecha mínima (hoy)
                 const today = new Date().toISOString().split('T')[0];
                 inputFecha.min = today;
 
-                const updateSlots = () => {
+                const updateSlots = async () => {
                     const servicioId = selectServicio.value;
                     const fecha = inputFecha.value;
 
@@ -860,15 +959,16 @@
                         return;
                     }
 
-                    const servicio = DataManager.getServicios().find(s => s.id === servicioId);
+                    const servicios = await DataManager.getServicios();
+                    const servicio = servicios.find(s => s.id === servicioId);
                     if (!servicio) return;
 
-                    const slots = this.calcularSlotsDisponibles(fecha, servicio.duracion);
+                    const slots = await this.calcularSlotsDisponibles(fecha, servicio.duracion);
                     const slotsContainer = document.getElementById('slots-container');
                     slotsContainer.innerHTML = '';
 
                     if (slots.length === 0) {
-                        slotsContainer.innerHTML = '<p class="col-span-full text-center text-gray-500">No hay horarios disponibles para esta fecha</p>';
+                        slotsContainer.innerHTML = '<p class="col-span-full text-center text-gray-500">No hay horarios disponibles</p>';
                         horariosDiv.classList.remove('hidden');
                         btnConfirmar.disabled = true;
                         return;
@@ -876,13 +976,13 @@
 
                     slots.forEach(slot => {
                         const btn = document.createElement('button');
-                        btn.className = 'px-4 py-2 rounded-lg border-2 border-gray-300 dark:border-gray-600 hover:border-primary hover:bg-primary/10 transition-all text-base font-medium';
+                        btn.className = 'px-4 py-2 rounded-lg border-2 border-primary/30 hover:border-primary hover:bg-primary/10 transition-all font-medium';
                         btn.textContent = slot;
                         btn.addEventListener('click', () => {
                             slotsContainer.querySelectorAll('button').forEach(b => {
-                                b.className = 'px-4 py-2 rounded-lg border-2 border-gray-300 dark:border-gray-600 hover:border-primary hover:bg-primary/10 transition-all text-base font-medium';
+                                b.className = 'px-4 py-2 rounded-lg border-2 border-primary/30 hover:border-primary hover:bg-primary/10 transition-all font-medium';
                             });
-                            btn.className = 'px-4 py-2 rounded-lg border-2 border-primary bg-primary text-white transition-all text-base font-medium';
+                            btn.className = 'px-4 py-2 rounded-lg border-2 border-primary bg-primary text-dark transition-all font-bold';
                             selectedSlot = slot;
                             btnConfirmar.disabled = false;
                         });
@@ -892,13 +992,12 @@
                     horariosDiv.classList.remove('hidden');
                 };
 
-                selectServicio.addEventListener('change', updateSlots);
-                inputFecha.addEventListener('change', updateSlots);
+                selectServicio?.addEventListener('change', updateSlots);
+                inputFecha?.addEventListener('change', updateSlots);
 
-                btnConfirmar.addEventListener('click', () => {
+                btnConfirmar?.addEventListener('click', async () => {
                     const servicioId = selectServicio.value;
                     const fecha = inputFecha.value;
-                    const user = DataManager.getCurrentUser();
 
                     if (!servicioId || !fecha || !selectedSlot) return;
 
@@ -907,108 +1006,51 @@
                     fechaHora.setHours(parseInt(hora), parseInt(minuto), 0, 0);
 
                     const nuevaCita = {
-                        id: Date.now().toString(),
-                        cliente_id: user.id,
+                        cliente_id: this.currentUser.id,
                         servicio_id: servicioId,
                         barbero_id: null,
                         fecha_hora: fechaHora.toISOString(),
                         estado_asignacion: 'PENDIENTE'
                     };
 
-                    const citas = DataManager.getCitas();
-                    citas.push(nuevaCita);
-                    DataManager.setCitas(citas);
+                    Loader.show();
+                    const success = await DataManager.saveCita(nuevaCita);
+                    Loader.hide();
 
-                    const successDiv = document.getElementById('reserva-success');
-                    successDiv.textContent = '¡Cita reservada exitosamente! El administrador asignará un barbero pronto.';
-                    successDiv.classList.remove('hidden');
-
-                    setTimeout(() => {
-                        this.currentView = 'mis-citas';
-                        this.render();
-                    }, 2000);
+                    if (success) {
+                        Notifier.show('¡Cita reservada exitosamente!', 'success');
+                        setTimeout(async () => {
+                            this.currentView = 'mis-citas';
+                            await this.render();
+                        }, 1500);
+                    } else {
+                        Notifier.show('Error al reservar cita', 'error');
+                    }
                 });
             }
 
             attachMisCitasEvents() {
                 document.querySelectorAll('.btn-cancelar-cita').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
+                    btn.addEventListener('click', async (e) => {
                         const id = e.currentTarget.dataset.id;
-                        this.showConfirmModal('¿Está seguro de cancelar esta cita?', () => {
-                            let citas = DataManager.getCitas();
-                            citas = citas.filter(c => c.id !== id);
-                            DataManager.setCitas(citas);
-                            this.render();
+                        this.showConfirmModal('¿Cancelar esta cita?', async () => {
+                            Loader.show();
+                            const { error } = await supabase.from('citas').delete().eq('id', id);
+                            Loader.hide();
+                            if (!error) {
+                                Notifier.show('Cita cancelada', 'success');
+                                await this.render();
+                            } else {
+                                Notifier.show('Error al cancelar', 'error');
+                            }
                         });
                     });
                 });
-            }
 
-            attachAsignarCitasEvents() {
-                document.querySelectorAll('.select-barbero-asignar').forEach(select => {
-                    select.addEventListener('change', (e) => {
-                        const citaId = e.currentTarget.dataset.citaId;
-                        const btn = document.querySelector(`.btn-asignar[data-cita-id="${citaId}"]`);
-                        btn.disabled = !e.currentTarget.value;
-                    });
-                });
-
-                document.querySelectorAll('.btn-asignar').forEach(btn => {
+                document.querySelectorAll('.btn-pagar-cita').forEach(btn => {
                     btn.addEventListener('click', (e) => {
-                        const citaId = e.currentTarget.dataset.citaId;
-                        const select = document.querySelector(`.select-barbero-asignar[data-cita-id="${citaId}"]`);
-                        const barberoId = select.value;
-
-                        if (!barberoId) return;
-
-                        const citas = DataManager.getCitas();
-                        const cita = citas.find(c => c.id === citaId);
-                        const barbero = DataManager.getBarberos().find(b => b.id === barberoId);
-
-                        if (!cita || !barbero) return;
-
-                        // Validar conflictos de horarios
-                        const fechaCita = new Date(cita.fecha_hora);
-                        const servicio = DataManager.getServicios().find(s => s.id === cita.servicio_id);
-                        const duracionMinutos = servicio ? servicio.duracion : 30;
-                        const finCita = new Date(fechaCita.getTime() + duracionMinutos * 60000);
-
-                        const conflicto = citas.find(c =>
-                            c.id !== citaId &&
-                            c.barbero_id === barberoId &&
-                            c.estado_asignacion === 'ASIGNADO' &&
-                            this.hayConflictoHorario(new Date(c.fecha_hora), fechaCita, finCita, c.servicio_id)
-                        );
-
-                        const errorDiv = document.querySelector(`.asignar-error-${citaId}`);
-
-                        if (conflicto) {
-                            errorDiv.textContent = 'El barbero ya tiene una cita en este horario';
-                            errorDiv.classList.remove('hidden');
-                            return;
-                        }
-
-                        // Verificar horario de trabajo del barbero
-                        const hora = fechaCita.getHours();
-                        const minuto = fechaCita.getMinutes();
-                        const horaActual = hora + minuto / 60;
-                        const [horaIni, minIni] = barbero.horario_inicio.split(':');
-                        const [horaFin, minFin] = barbero.horario_fin.split(':');
-                        const horarioIni = parseInt(horaIni) + parseInt(minIni) / 60;
-                        const horarioFin = parseInt(horaFin) + parseInt(minFin) / 60;
-
-                        if (horaActual < horarioIni || horaActual >= horarioFin) {
-                            errorDiv.textContent = 'La cita está fuera del horario de trabajo del barbero';
-                            errorDiv.classList.remove('hidden');
-                            return;
-                        }
-
-                        // Asignar barbero
-                        cita.barbero_id = barberoId;
-                        cita.estado_asignacion = 'ASIGNADO';
-                        DataManager.setCitas(citas);
-
-                        this.render();
+                        const precio = e.currentTarget.dataset.precio;
+                        this.procesarPago(precio);
                     });
                 });
             }
@@ -1016,33 +1058,26 @@
             // ========================================
             // UTILIDADES
             // ========================================
-            calcularSlotsDisponibles(fecha, duracion) {
+            async calcularSlotsDisponibles(fecha, duracion) {
                 const slots = [];
-                const horaInicio = 9; // 9 AM
-                const horaFin = 19; // 7 PM
-                const intervalo = 30; // minutos
+                const horaInicio = 9;
+                const horaFin = 19;
+                const intervalo = 30;
 
-                // Generar todos los slots posibles
                 for (let hora = horaInicio; hora < horaFin; hora++) {
                     for (let minuto = 0; minuto < 60; minuto += intervalo) {
-                        const horaStr = hora.toString().padStart(2, '0');
-                        const minutoStr = minuto.toString().padStart(2, '0');
-
-                        // Verificar si el slot + duración del servicio cabe antes de horaFin
                         const finSlot = hora + (minuto + duracion) / 60;
                         if (finSlot <= horaFin) {
-                            slots.push(`${horaStr}:${minutoStr}`);
+                            slots.push(`${hora.toString().padStart(2, '0')}:${minuto.toString().padStart(2, '0')}`);
                         }
                     }
                 }
 
-                // Filtrar slots que ya tienen citas asignadas
-                const citas = DataManager.getCitas();
+                const citas = await DataManager.getCitas();
                 const citasFecha = citas.filter(c => {
                     const fechaCita = new Date(c.fecha_hora);
                     const fechaSeleccionada = new Date(fecha);
-                    return fechaCita.toDateString() === fechaSeleccionada.toDateString() &&
-                           c.estado_asignacion === 'ASIGNADO';
+                    return fechaCita.toDateString() === fechaSeleccionada.toDateString() && c.estado_asignacion === 'ASIGNADO';
                 });
 
                 return slots.filter(slot => {
@@ -1051,53 +1086,47 @@
                     inicioSlot.setHours(parseInt(hora), parseInt(minuto), 0, 0);
                     const finSlot = new Date(inicioSlot.getTime() + duracion * 60000);
 
-                    // Verificar si hay conflicto con alguna cita existente
                     return !citasFecha.some(c => {
                         const inicioCita = new Date(c.fecha_hora);
-                        const servicioCita = DataManager.getServicios().find(s => s.id === c.servicio_id);
-                        const duracionCita = servicioCita ? servicioCita.duracion : 30;
+                        const duracionCita = c.servicio?.duracion || 30;
                         const finCita = new Date(inicioCita.getTime() + duracionCita * 60000);
-
-                        // Hay conflicto si los horarios se superponen
                         return (inicioSlot < finCita && finSlot > inicioCita);
                     });
                 });
             }
 
-            hayConflictoHorario(fechaCitaExistente, inicioNueva, finNueva, servicioIdExistente) {
-                const servicioExistente = DataManager.getServicios().find(s => s.id === servicioIdExistente);
-                const duracionExistente = servicioExistente ? servicioExistente.duracion : 30;
-                const finExistente = new Date(fechaCitaExistente.getTime() + duracionExistente * 60000);
-
-                return (inicioNueva < finExistente && finNueva > fechaCitaExistente);
+            procesarPago(precio) {
+                Notifier.show('Procesando pago...', 'info');
+                setTimeout(() => {
+                    Notifier.show('¡Pago exitoso! Gracias.', 'success');
+                }, 2000);
             }
 
             showServicioModal(servicio = null) {
                 const isEdit = !!servicio;
                 const modal = document.createElement('div');
-                modal.className = 'fixed inset-0 modal-overlay flex items-center justify-center z-50 px-4';
+                modal.className = 'fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 px-4';
                 modal.innerHTML = `
-                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-8 w-full max-w-md fade-in">
-                        <h3 class="text-2xl font-bold mb-6">${isEdit ? 'Editar' : 'Nuevo'} Servicio</h3>
+                    <div class="bg-dark-card border border-primary/20 rounded-xl shadow-2xl p-8 w-full max-w-md slide-in glow-strong">
+                        <h3 class="text-2xl font-display font-bold mb-6 gradient-gold text-transparent bg-clip-text">${isEdit ? 'Editar' : 'Nuevo'} Servicio</h3>
                         <div class="space-y-4">
                             <div>
-                                <label class="block text-sm font-medium mb-2">Nombre del Servicio</label>
-                                <input type="text" id="modal-nombre" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-base focus:ring-2 focus:ring-primary" value="${servicio ? servicio.nombre : ''}">
+                                <label class="block text-sm font-medium mb-2 text-gray-300">Nombre</label>
+                                <input type="text" id="modal-nombre" class="w-full px-4 py-3 rounded-lg bg-dark-lighter border border-primary/30 focus:border-primary text-white" value="${servicio?.nombre || ''}">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium mb-2">Duración (minutos)</label>
-                                <input type="number" id="modal-duracion" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-base focus:ring-2 focus:ring-primary" value="${servicio ? servicio.duracion : '30'}" min="15" step="15">
+                                <label class="block text-sm font-medium mb-2 text-gray-300">Duración (min)</label>
+                                <input type="number" id="modal-duracion" class="w-full px-4 py-3 rounded-lg bg-dark-lighter border border-primary/30 focus:border-primary text-white" value="${servicio?.duracion || 30}" min="15" step="15">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium mb-2">Precio ($)</label>
-                                <input type="number" id="modal-precio" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-base focus:ring-2 focus:ring-primary" value="${servicio ? servicio.precio : '20'}" min="1">
+                                <label class="block text-sm font-medium mb-2 text-gray-300">Precio ($)</label>
+                                <input type="number" id="modal-precio" class="w-full px-4 py-3 rounded-lg bg-dark-lighter border border-primary/30 focus:border-primary text-white" value="${servicio?.precio || 20}" min="1">
                             </div>
-                            <div id="modal-error" class="hidden text-red-500 text-sm"></div>
                             <div class="flex space-x-3 pt-4">
-                                <button id="modal-cancel" class="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-all text-base font-medium">
+                                <button id="modal-cancel" class="flex-1 px-4 py-3 bg-dark-lighter border border-primary/20 text-gray-300 rounded-lg hover:bg-dark transition-all font-medium">
                                     Cancelar
                                 </button>
-                                <button id="modal-save" class="flex-1 px-4 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg transition-all text-base font-medium">
+                                <button id="modal-save" class="flex-1 px-4 py-3 gradient-gold text-dark rounded-lg font-bold transition-all shadow-lg hover:shadow-xl">
                                     ${isEdit ? 'Guardar' : 'Crear'}
                                 </button>
                             </div>
@@ -1111,73 +1140,62 @@
                     if (e.target === modal) modal.remove();
                 });
 
-                modal.querySelector('#modal-save').addEventListener('click', () => {
+                modal.querySelector('#modal-save').addEventListener('click', async () => {
                     const nombre = modal.querySelector('#modal-nombre').value.trim();
                     const duracion = parseInt(modal.querySelector('#modal-duracion').value);
                     const precio = parseFloat(modal.querySelector('#modal-precio').value);
-                    const errorDiv = modal.querySelector('#modal-error');
 
                     if (!nombre || !duracion || !precio) {
-                        errorDiv.textContent = 'Por favor complete todos los campos';
-                        errorDiv.classList.remove('hidden');
+                        Notifier.show('Complete todos los campos', 'error');
                         return;
                     }
 
-                    let servicios = DataManager.getServicios();
-                    if (isEdit) {
-                        const index = servicios.findIndex(s => s.id === servicio.id);
-                        servicios[index] = { ...servicio, nombre, duracion, precio };
+                    const servicioData = { nombre, duracion, precio };
+                    if (isEdit) servicioData.id = servicio.id;
+
+                    Loader.show();
+                    const success = await DataManager.saveServicio(servicioData);
+                    Loader.hide();
+
+                    if (success) {
+                        Notifier.show(isEdit ? 'Servicio actualizado' : 'Servicio creado', 'success');
+                        modal.remove();
+                        await this.render();
                     } else {
-                        servicios.push({
-                            id: Date.now().toString(),
-                            nombre,
-                            duracion,
-                            precio
-                        });
+                        Notifier.show('Error al guardar', 'error');
                     }
-                    DataManager.setServicios(servicios);
-                    modal.remove();
-                    this.render();
                 });
             }
 
-            showBarberoModal(barbero = null) {
-                const isEdit = !!barbero;
-                const users = DataManager.getUsers();
-                const clientesDisponibles = users.filter(u => u.rol === 'CLIENTE' || u.rol === 'BARBERO');
-
+            showInventarioModal(item = null) {
+                const isEdit = !!item;
                 const modal = document.createElement('div');
-                modal.className = 'fixed inset-0 modal-overlay flex items-center justify-center z-50 px-4';
+                modal.className = 'fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 px-4';
                 modal.innerHTML = `
-                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-8 w-full max-w-md fade-in">
-                        <h3 class="text-2xl font-bold mb-6">${isEdit ? 'Editar' : 'Nuevo'} Barbero</h3>
+                    <div class="bg-dark-card border border-primary/20 rounded-xl shadow-2xl p-8 w-full max-w-md slide-in glow-strong">
+                        <h3 class="text-2xl font-display font-bold mb-6 gradient-gold text-transparent bg-clip-text">${isEdit ? 'Editar' : 'Nuevo'} Producto</h3>
                         <div class="space-y-4">
                             <div>
-                                <label class="block text-sm font-medium mb-2">Usuario (Email)</label>
-                                <select id="modal-usuario" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-base focus:ring-2 focus:ring-primary" ${isEdit ? 'disabled' : ''}>
-                                    <option value="">Seleccione un usuario</option>
-                                    ${clientesDisponibles.map(u => `
-                                        <option value="${u.id}" ${barbero && barbero.usuario_id === u.id ? 'selected' : ''}>${u.nombre} (${u.email})</option>
-                                    `).join('')}
-                                </select>
-                                ${isEdit ? '<p class="text-xs text-gray-500 mt-1">No se puede cambiar el usuario de un barbero existente</p>' : ''}
+                                <label class="block text-sm font-medium mb-2 text-gray-300">Nombre</label>
+                                <input type="text" id="modal-nombre" class="w-full px-4 py-3 rounded-lg bg-dark-lighter border border-primary/30 text-white" value="${item?.nombre || ''}">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium mb-2">Horario Inicio</label>
-                                <input type="time" id="modal-horario-inicio" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-base focus:ring-2 focus:ring-primary" value="${barbero ? barbero.horario_inicio : '09:00'}">
+                                <label class="block text-sm font-medium mb-2 text-gray-300">Descripción</label>
+                                <input type="text" id="modal-desc" class="w-full px-4 py-3 rounded-lg bg-dark-lighter border border-primary/30 text-white" value="${item?.descripcion || ''}">
                             </div>
-                            <div>
-                                <label class="block text-sm font-medium mb-2">Horario Fin</label>
-                                <input type="time" id="modal-horario-fin" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-base focus:ring-2 focus:ring-primary" value="${barbero ? barbero.horario_fin : '18:00'}">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium mb-2 text-gray-300">Cantidad</label>
+                                    <input type="number" id="modal-cantidad" class="w-full px-4 py-3 rounded-lg bg-dark-lighter border border-primary/30 text-white" value="${item?.cantidad || 0}" min="0">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium mb-2 text-gray-300">Mínimo</label>
+                                    <input type="number" id="modal-minimo" class="w-full px-4 py-3 rounded-lg bg-dark-lighter border border-primary/30 text-white" value="${item?.minimo || 5}" min="1">
+                                </div>
                             </div>
-                            <div id="modal-error" class="hidden text-red-500 text-sm"></div>
                             <div class="flex space-x-3 pt-4">
-                                <button id="modal-cancel" class="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-all text-base font-medium">
-                                    Cancelar
-                                </button>
-                                <button id="modal-save" class="flex-1 px-4 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg transition-all text-base font-medium">
-                                    ${isEdit ? 'Guardar' : 'Crear'}
-                                </button>
+                                <button id="modal-cancel" class="flex-1 px-4 py-3 bg-dark-lighter border border-primary/20 text-gray-300 rounded-lg font-medium">Cancelar</button>
+                                <button id="modal-save" class="flex-1 px-4 py-3 gradient-gold text-dark rounded-lg font-bold">${isEdit ? 'Guardar' : 'Crear'}</button>
                             </div>
                         </div>
                     </div>
@@ -1189,65 +1207,46 @@
                     if (e.target === modal) modal.remove();
                 });
 
-                modal.querySelector('#modal-save').addEventListener('click', () => {
-                    const usuarioId = modal.querySelector('#modal-usuario').value;
-                    const horarioInicio = modal.querySelector('#modal-horario-inicio').value;
-                    const horarioFin = modal.querySelector('#modal-horario-fin').value;
-                    const errorDiv = modal.querySelector('#modal-error');
+                modal.querySelector('#modal-save').addEventListener('click', async () => {
+                    const nombre = modal.querySelector('#modal-nombre').value.trim();
+                    const descripcion = modal.querySelector('#modal-desc').value.trim();
+                    const cantidad = parseInt(modal.querySelector('#modal-cantidad').value);
+                    const minimo = parseInt(modal.querySelector('#modal-minimo').value);
 
-                    if (!usuarioId || !horarioInicio || !horarioFin) {
-                        errorDiv.textContent = 'Por favor complete todos los campos';
-                        errorDiv.classList.remove('hidden');
+                    if (!nombre) {
+                        Notifier.show('Ingrese el nombre', 'error');
                         return;
                     }
 
-                    let barberos = DataManager.getBarberos();
+                    const itemData = { nombre, descripcion, cantidad, minimo };
+                    if (isEdit) itemData.id = item.id;
 
-                    // Verificar que el usuario no sea ya barbero (solo en creación)
-                    if (!isEdit && barberos.find(b => b.usuario_id === usuarioId)) {
-                        errorDiv.textContent = 'Este usuario ya es barbero';
-                        errorDiv.classList.remove('hidden');
-                        return;
-                    }
+                    Loader.show();
+                    const success = await DataManager.saveInventario(itemData);
+                    Loader.hide();
 
-                    if (isEdit) {
-                        const index = barberos.findIndex(b => b.id === barbero.id);
-                        barberos[index] = { ...barbero, horario_inicio: horarioInicio, horario_fin: horarioFin };
+                    if (success) {
+                        Notifier.show(isEdit ? 'Producto actualizado' : 'Producto creado', 'success');
+                        modal.remove();
+                        await this.render();
                     } else {
-                        barberos.push({
-                            id: Date.now().toString(),
-                            usuario_id: usuarioId,
-                            horario_inicio: horarioInicio,
-                            horario_fin: horarioFin
-                        });
-
-                        // Actualizar rol del usuario a BARBERO
-                        const users = DataManager.getUsers();
-                        const userIndex = users.findIndex(u => u.id === usuarioId);
-                        if (userIndex !== -1) {
-                            users[userIndex].rol = 'BARBERO';
-                            DataManager.setUsers(users);
-                        }
+                        Notifier.show('Error al guardar', 'error');
                     }
-
-                    DataManager.setBarberos(barberos);
-                    modal.remove();
-                    this.render();
                 });
             }
 
             showConfirmModal(message, onConfirm) {
                 const modal = document.createElement('div');
-                modal.className = 'fixed inset-0 modal-overlay flex items-center justify-center z-50 px-4';
+                modal.className = 'fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 px-4';
                 modal.innerHTML = `
-                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-8 w-full max-w-md fade-in">
-                        <h3 class="text-xl font-bold mb-4">Confirmar Acción</h3>
-                        <p class="text-gray-700 dark:text-gray-300 mb-6">${message}</p>
+                    <div class="bg-dark-card border border-primary/20 rounded-xl shadow-2xl p-8 w-full max-w-md slide-in glow-strong">
+                        <h3 class="text-xl font-display font-bold mb-4 text-primary">Confirmar Acción</h3>
+                        <p class="text-gray-300 mb-6">${message}</p>
                         <div class="flex space-x-3">
-                            <button id="modal-cancel" class="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-all text-base font-medium">
+                            <button id="modal-cancel" class="flex-1 px-4 py-3 bg-dark-lighter border border-primary/20 text-gray-300 rounded-lg font-medium">
                                 Cancelar
                             </button>
-                            <button id="modal-confirm" class="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-all text-base font-medium">
+                            <button id="modal-confirm" class="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold transition-all">
                                 Confirmar
                             </button>
                         </div>
@@ -1268,7 +1267,7 @@
         }
 
         // ========================================
-        // 4. INICIALIZACIÓN
+        // INICIALIZACIÓN
         // ========================================
         document.addEventListener('DOMContentLoaded', () => {
             new App();
